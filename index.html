@@ -514,7 +514,19 @@
 
         <!-- TABLA DE REPORTES -->
         <div class="table-card">
-            <h3 class="chart-title">📋 Últimos Reportes</h3>
+            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
+                <h3 class="chart-title" style="margin:0;">📋 Reportes</h3>
+                <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                    <label style="font-size:13px; color:#666; font-weight:600;">Buscar por fecha:</label>
+                    <input type="date" id="buscarFechaTabla" onchange="filtrarTabla()"
+                        style="border:1.5px solid #e0e0e0; border-radius:6px; padding:6px 10px; font-size:13px; font-family:inherit;">
+                    <button onclick="limpiarFechaTabla()"
+                        style="background:transparent; border:1.5px solid #e0e0e0; border-radius:6px; padding:6px 12px; font-size:12px; cursor:pointer; color:#666;">
+                        ✕ Limpiar
+                    </button>
+                    <span id="tablaTotalInfo" style="font-size:12px; color:#999;"></span>
+                </div>
+            </div>
             <div id="tableContainer">
                 <div class="loading">Cargando datos...</div>
             </div>
@@ -546,6 +558,9 @@
         
         let todosLosReportes = [];
         let reportesFiltrados = [];
+        let reportesTabla = [];      // reportes filtrados por fecha en tabla
+        let paginaActual = 1;
+        const FILAS_POR_PAGINA = 15;
         let charts = {};
         let reporteActual = null; // Para guardar el reporte que se está viendo en el modal
 
@@ -782,6 +797,80 @@
         }
 
         function actualizarTabla() {
+            // Reiniciar tabla con reportes filtrados
+            reportesTabla = [...reportesFiltrados];
+            paginaActual = 1;
+            renderTabla();
+        }
+
+        function filtrarTabla() {
+            const fecha = document.getElementById('buscarFechaTabla').value;
+            if (fecha) {
+                reportesTabla = reportesFiltrados.filter(r => r.fecha === fecha);
+            } else {
+                reportesTabla = [...reportesFiltrados];
+            }
+            paginaActual = 1;
+            renderTabla();
+        }
+
+        function limpiarFechaTabla() {
+            document.getElementById('buscarFechaTabla').value = '';
+            reportesTabla = [...reportesFiltrados];
+            paginaActual = 1;
+            renderTabla();
+        }
+
+        function renderTabla() {
+            // Ordenar más reciente primero
+            const ordenados = [...reportesTabla].sort((a, b) => {
+                const fa = a.fecha + (a.hora || '');
+                const fb = b.fecha + (b.hora || '');
+                return fb.localeCompare(fa);
+            });
+
+            const total = ordenados.length;
+            const totalPaginas = Math.max(1, Math.ceil(total / FILAS_POR_PAGINA));
+            if (paginaActual > totalPaginas) paginaActual = totalPaginas;
+
+            const inicio = (paginaActual - 1) * FILAS_POR_PAGINA;
+            const fin = inicio + FILAS_POR_PAGINA;
+            const pagina = ordenados.slice(inicio, fin);
+
+            // Info total
+            document.getElementById('tablaTotalInfo').textContent =
+                total > 0 ? `${total} reporte(s) — Página ${paginaActual} de ${totalPaginas}` : '';
+
+            if (total === 0) {
+                document.getElementById('tableContainer').innerHTML =
+                    '<div class="empty-state"><div class="empty-state-icon">📭</div><p>No hay reportes para mostrar</p></div>';
+                return;
+            }
+
+            // Paginación
+            const paginacionHTML = totalPaginas > 1 ? `
+                <div style="display:flex; align-items:center; justify-content:center; gap:8px; padding:14px; border-top:1px solid #f0f0f0;">
+                    <button onclick="cambiarPagina(1)" ${paginaActual === 1 ? 'disabled' : ''}
+                        style="padding:6px 10px; border-radius:6px; border:1.5px solid #e0e0e0; background:white; cursor:pointer; font-size:12px; ${paginaActual === 1 ? 'opacity:0.4;' : ''}">
+                        ⏮ Primera
+                    </button>
+                    <button onclick="cambiarPagina(${paginaActual - 1})" ${paginaActual === 1 ? 'disabled' : ''}
+                        style="padding:6px 12px; border-radius:6px; border:1.5px solid #e0e0e0; background:white; cursor:pointer; font-size:13px; ${paginaActual === 1 ? 'opacity:0.4;' : ''}">
+                        ← Anterior
+                    </button>
+                    <span style="font-size:13px; color:#666; font-weight:600; padding:0 8px;">
+                        ${paginaActual} / ${totalPaginas}
+                    </span>
+                    <button onclick="cambiarPagina(${paginaActual + 1})" ${paginaActual === totalPaginas ? 'disabled' : ''}
+                        style="padding:6px 12px; border-radius:6px; border:1.5px solid #e0e0e0; background:white; cursor:pointer; font-size:13px; ${paginaActual === totalPaginas ? 'opacity:0.4;' : ''}">
+                        Siguiente →
+                    </button>
+                    <button onclick="cambiarPagina(${totalPaginas})" ${paginaActual === totalPaginas ? 'disabled' : ''}
+                        style="padding:6px 10px; border-radius:6px; border:1.5px solid #e0e0e0; background:white; cursor:pointer; font-size:12px; ${paginaActual === totalPaginas ? 'opacity:0.4;' : ''}">
+                        Última ⏭
+                    </button>
+                </div>` : '';
+
             const html = `
                 <table>
                     <thead>
@@ -796,12 +885,12 @@
                         </tr>
                     </thead>
                     <tbody>
-                        ${reportesFiltrados.slice(0, 20).map(r => `
+                        ${pagina.map(r => `
                             <tr>
                                 <td>${r.fecha}</td>
-                                <td>${r.hora}</td>
+                                <td>${r.hora || '—'}</td>
                                 <td>${r.bodega}</td>
-                                <td>${r.encargado}</td>
+                                <td>${r.encargado || '—'}</td>
                                 <td>${r.total_escaneos}</td>
                                 <td>
                                     <span class="badge ${r.sin_cargas ? 'badge-warning' : 'badge-success'}">
@@ -817,11 +906,18 @@
                         `).join('')}
                     </tbody>
                 </table>
-                ${reportesFiltrados.length === 0 ? 
-                    '<div class="empty-state"><div class="empty-state-icon">📭</div><p>No hay reportes para mostrar</p></div>' : ''}
+                ${paginacionHTML}
             `;
-            
+
             document.getElementById('tableContainer').innerHTML = html;
+        }
+
+        function cambiarPagina(n) {
+            const total = reportesTabla.length;
+            const totalPaginas = Math.max(1, Math.ceil(total / FILAS_POR_PAGINA));
+            paginaActual = Math.max(1, Math.min(n, totalPaginas));
+            renderTabla();
+            document.querySelector('.table-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 
         function actualizarFiltroBodegas() {
